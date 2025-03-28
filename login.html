@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BatterySync Login</title>
+    <link rel="stylesheet" href="assets/css/styles.css">
+    <link rel="stylesheet" href="assets/css/login.css">
+</head>
+<body>
+    <div class="login-container">
+        <form id="loginForm" class="login-form">
+            <h2>Login to BatterySync</h2>
+            <div class="form-group">
+                <input type="email" id="email" placeholder="Email" required>
+            </div>
+            <div class="form-group">
+                <input type="password" id="password" placeholder="Password" required>
+            </div>
+            <button type="submit">Login</button>
+            <p id="error-message" class="error-message"></p>
+
+            <!-- ✅ Signup Link -->
+            <p class="signup-link">Don't have an account? <a href="signup.html">Sign up</a></p>
+        </form>
+    </div>
+    <script src="assets/js/login.js"></script>
+</body>
+</html>
