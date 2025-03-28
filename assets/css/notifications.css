@@ -1,0 +1,36 @@
+.notification-toast {
+    position: fixed;
+    bottom: -100px;
+    right: 20px;
+    background: var(--container-color);
+    color: var(--text-color);
+    padding: 15px 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: transform 0.3s ease-in-out;
+    z-index: 1000;
+}
+
+.notification-toast.show {
+    transform: translateY(-120px);
+}
+
+.notification-toast h4 {
+    margin: 0 0 5px 0;
+    color: #fff;
+}
+
+.notification-toast p {
+    margin: 0;
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 480px) {
+    .notification-toast {
+        left: 20px;
+        right: 20px;
+        text-align: center;
+    }
+}
