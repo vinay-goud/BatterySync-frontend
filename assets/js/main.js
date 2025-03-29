@@ -223,7 +223,7 @@ async function fetchBatteryStatus() {
       return;
     }
 
-    // Wrap the response in the same format as WebSocket data
+    // Always wrap in WebSocket format for consistency
     updateBattery({ [userEmail]: data });
   } catch (error) {
     console.error("Error fetching battery status:", error);
@@ -295,8 +295,14 @@ function connectWebSocket() {
           return;
         }
 
-        // Direct update with the received data structure
-        updateBattery(data);
+        // Handle both data formats
+        if (data[userEmail]) {
+          updateBattery(data); // WebSocket format
+        } else if (data.percentage !== undefined) {
+          updateBattery({ [userEmail]: data }); // API format
+        } else {
+          console.error("Invalid WebSocket data:", data);
+        }
       } catch (error) {
         console.error("WebSocket message error:", error);
       }
@@ -340,23 +346,37 @@ function updateBattery(data) {
 
     // Extract battery data properly
     let batteryData;
-    if (data[userEmail]) {
-      // Handle WebSocket format: {user@email.com: {percentage: 84, charging: false}}
+
+    // Check if data is in WebSocket format
+    if (typeof data === "object" && data[userEmail]) {
       batteryData = data[userEmail];
-    } else if (data.percentage !== undefined && data.charging !== undefined) {
-      // Handle direct API response format: {percentage: 84, charging: false}
+      console.log("Processing WebSocket format:", batteryData);
+    }
+    // Check if data is direct API format
+    else if (
+      typeof data === "object" &&
+      "percentage" in data &&
+      "charging" in data
+    ) {
       batteryData = data;
+      console.log("Processing API format:", batteryData);
     } else {
       console.error("Unrecognized data format:", data);
+      return;
+    }
+
+    // Ensure we have the required properties
+    if (!("percentage" in batteryData) || !("charging" in batteryData)) {
+      console.error("Missing required battery properties:", batteryData);
       return;
     }
 
     const level = Number(batteryData.percentage);
     const charging = Boolean(batteryData.charging);
 
-    // Validate the extracted values
-    if (isNaN(level) || typeof charging !== "boolean") {
-      console.error("Invalid battery values:", { level, charging });
+    // Validate the values
+    if (isNaN(level)) {
+      console.error("Invalid battery level:", level);
       return;
     }
 
