@@ -10,6 +10,7 @@ async function handleLogin(e) {
   const errorMessage = document.getElementById("error-message");
 
   try {
+    console.log("Attempting login for:", email);
     const response = await fetch(`${API_URL}/login`, {
       method: "POST",
       headers: {
@@ -20,14 +21,17 @@ async function handleLogin(e) {
     });
 
     const data = await response.json();
+    console.log("Login response:", data);
 
-    if (response.ok && data.token) {
-      localStorage.setItem("authToken", data.token);
+    if (response.ok && data.access_token) {
+      // Store the token and email in localStorage
+      localStorage.setItem("authToken", data.access_token);
       localStorage.setItem("userEmail", email);
       window.location.href = "/";
     } else {
       errorMessage.textContent =
-        data.message || "Login failed. Please try again.";
+        data.detail || "Login failed. Please try again.";
+      console.error("Login failed:", data);
     }
   } catch (error) {
     console.error("Login error:", error);
