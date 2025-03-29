@@ -39,8 +39,19 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Fetch Event (Try Cache First, then Network)
+// Fetch Event - Serve Cached Files
+// and Update Cache
 self.addEventListener("fetch", (event) => {
+  // Skip non-GET requests
+  if (event.request.method !== "GET") {
+    return;
+  }
+
+  // Skip backend API requests
+  if (event.request.url.includes("batterysync-backend.onrender.com")) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((response) => {
       return response || fetch(event.request);

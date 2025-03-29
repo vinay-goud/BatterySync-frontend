@@ -247,13 +247,19 @@ function verifyUserAccess(data) {
 
   return true;
 }
-
+let ws = null;
+let wsReconnectTimeout = null;
 // WebSocket connection function
 function connectWebSocket() {
   if (wsReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
     console.error("Max WebSocket reconnection attempts reached");
     showToast("Error", "Connection lost. Please refresh the page.");
     return;
+  }
+
+  if (ws) {
+    ws.close();
+    ws = null;
   }
 
   const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -273,6 +279,10 @@ function connectWebSocket() {
     ws.onopen = () => {
       console.log("WebSocket connected");
       wsReconnectAttempts = 0;
+      if (wsReconnectTimeout) {
+        clearTimeout(wsReconnectTimeout);
+        wsReconnectTimeout = null;
+      }
     };
 
     ws.onmessage = (event) => {
@@ -288,9 +298,8 @@ function connectWebSocket() {
         // Extract data for current user
         const userData = data[userEmail];
         if (
-          userData &&
-          userData.percentage !== undefined &&
-          userData.charging !== undefined
+          userData?.percentage !== undefined &&
+          userData?.charging !== undefined
         ) {
           console.log("Valid battery data received:", userData);
           updateBattery({ [userEmail]: userData });
@@ -310,33 +319,44 @@ function connectWebSocket() {
 
     ws.onclose = () => {
       console.log("WebSocket closed. Reconnecting...");
-      setTimeout(() => connectWebSocket(), 5000);
+      if (!wsReconnectTimeout) {
+        wsReconnectTimeout = setTimeout(() => {
+          wsReconnectTimeout = null;
+          connectWebSocket();
+        }, 5000);
+      }
       wsReconnectAttempts++;
     };
 
     return ws;
   } catch (error) {
     console.error("WebSocket connection error:", error);
+    if (!wsReconnectTimeout) {
+      wsReconnectTimeout = setTimeout(() => {
+        wsReconnectTimeout = null;
+        connectWebSocket();
+      }, 5000);
+    }
     wsReconnectAttempts++;
-    setTimeout(() => connectWebSocket(), 5000);
-    showToast("Error", "Failed to connect. Retrying...");
   }
 }
 
 // Function to update battery UI
 function updateBattery(data) {
   try {
-    // Extract the correct battery data
-    const batteryData = data[userEmail] || data;
-    const level = batteryData.percentage;
-    const charging = batteryData.charging;
-
-    if (level === undefined || charging === undefined) {
+    const batteryData = data[userEmail];
+    if (!batteryData?.percentage || !batteryData?.charging) {
       console.error("Invalid battery data structure:", data);
       return;
     }
 
+    const level = batteryData.percentage;
+    const charging = batteryData.charging;
+
     console.log(`Updating battery UI: Level=${level}%, Charging=${charging}`);
+
+    // Ensure level is within valid range
+    const normalizedLevel = Math.max(0, Math.min(100, level));
 
     batteryLiquid.style.transition = "height 0.3s ease-in-out";
     batteryPercentage.innerHTML = level + "%";
@@ -427,10 +447,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     await fetchBatteryStatus();
     const ws = connectWebSocket();
 
-    // Cleanup on page unload
-    window.addEventListener("unload", () => {
-      if (cleanup) cleanup();
-      if (ws) ws.close();
+    // Cleanup on page close
+    window.addEventListener("beforeunload", () => {
+      cleanup?.();
+      ws?.close();
     });
   } catch (error) {
     console.error("Initialization error:", error);
