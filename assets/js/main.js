@@ -10,36 +10,45 @@ const API_URL =
     ? "http://localhost:5000"
     : "https://batterysync-backend.onrender.com";
 
-if (!authToken) {
+// Redirect to login if no auth token
+if (!authToken || !userEmail) {
   window.location.href = "/login.html";
 }
 
 let previousCharging = null;
 
 // Function to show browser notifications
-function showNotification(title, message) {
+async function showNotification(title, message) {
   console.log("Notification Triggered:", title, message);
 
-  if (Notification.permission === "default") {
-    Notification.requestPermission();
+  try {
+    if ("serviceWorker" in navigator && "PushManager" in window) {
+      if (Notification.permission === "default") {
+        await Notification.requestPermission();
+      }
+
+      if (Notification.permission === "granted") {
+        const notification = new Notification(title, {
+          body: message,
+          icon: "/assets/img/icon-192.png",
+          badge: "/assets/img/icon-192.png",
+          vibrate: [200, 100, 200],
+          requireInteraction: true,
+          sound: "/assets/audio/notification.mp3",
+        });
+
+        notification.onclick = () => {
+          window.focus();
+          notification.close();
+        };
+      }
+    }
+  } catch (error) {
+    console.error("Notification error:", error);
   }
 
-  if (Notification.permission === "granted") {
-    const notification = new Notification(title, {
-      body: message,
-      icon: "/assets/img/favicon.png",
-      badge: "/assets/img/favicon.png",
-      vibrate: [200, 100, 200],
-      requireInteraction: true,
-    });
-
-    notification.onclick = () => {
-      window.focus();
-      notification.close();
-    };
-
-    showToast(title, message);
-  }
+  // Always show toast
+  showToast(title, message);
 }
 
 // Function to show toast animation
@@ -77,8 +86,6 @@ async function sendBatteryStatus() {
       charging: battery.charging,
     };
 
-    console.log("Sending battery data:", batteryData);
-
     try {
       const response = await fetch(`${API_URL}/update_battery`, {
         method: "POST",
@@ -90,24 +97,27 @@ async function sendBatteryStatus() {
       });
 
       if (!response.ok) {
-        console.error("Error sending battery data:", await response.text());
+        throw new Error(await response.text());
       }
     } catch (error) {
       console.error("Failed to send battery data:", error);
     }
   }
 
-  updateBatteryStatus();
+  // Initial update and set interval
+  await updateBatteryStatus();
   setInterval(updateBatteryStatus, 5000);
 
+  // Add battery event listeners
   battery.addEventListener("chargingchange", updateBatteryStatus);
   battery.addEventListener("levelchange", updateBatteryStatus);
 }
 
 // Function to fetch battery status from backend
 async function fetchBatteryStatus() {
-  if (!userEmail) {
-    console.error("User email not found in localStorage.");
+  if (!userEmail || !authToken) {
+    console.error("Missing user credentials");
+    window.location.href = "/login.html";
     return;
   }
 
@@ -115,19 +125,18 @@ async function fetchBatteryStatus() {
     const response = await fetch(
       `${API_URL}/batterystatus?email=${userEmail}`,
       {
-        method: "GET",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
       }
     );
 
-    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
 
-    if (data.error) {
-      console.error("Battery status error:", data.error);
-    } else {
+    const data = await response.json();
+    if (!data.error) {
       updateBattery(data);
     }
   } catch (error) {
@@ -138,22 +147,20 @@ async function fetchBatteryStatus() {
 // WebSocket connection function
 function connectWebSocket() {
   const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsHost =
+  const wsURL =
     window.location.hostname === "localhost"
       ? `ws://localhost:5000/ws`
       : `wss://batterysync-backend.onrender.com/ws`;
 
-  const ws = new WebSocket(`${wsHost}?token=${authToken}`);
+  const ws = new WebSocket(`${wsURL}?token=${authToken}&email=${userEmail}`);
 
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
-
     if (data.error === "unauthorized") {
       localStorage.removeItem("authToken");
       window.location.href = "/login.html";
       return;
     }
-
     updateBattery(data);
   };
 
@@ -187,36 +194,25 @@ function updateBattery(batt) {
     batteryStatus.innerHTML = "";
   }
 
+  // Update battery color
+  batteryLiquid.classList.remove(
+    "gradient-color-red",
+    "gradient-color-orange",
+    "gradient-color-yellow",
+    "gradient-color-green"
+  );
+
   if (level <= 20) {
     batteryLiquid.classList.add("gradient-color-red");
-    batteryLiquid.classList.remove(
-      "gradient-color-orange",
-      "gradient-color-yellow",
-      "gradient-color-green"
-    );
   } else if (level <= 40) {
     batteryLiquid.classList.add("gradient-color-orange");
-    batteryLiquid.classList.remove(
-      "gradient-color-red",
-      "gradient-color-yellow",
-      "gradient-color-green"
-    );
   } else if (level <= 80) {
     batteryLiquid.classList.add("gradient-color-yellow");
-    batteryLiquid.classList.remove(
-      "gradient-color-red",
-      "gradient-color-orange",
-      "gradient-color-green"
-    );
   } else {
     batteryLiquid.classList.add("gradient-color-green");
-    batteryLiquid.classList.remove(
-      "gradient-color-red",
-      "gradient-color-orange",
-      "gradient-color-yellow"
-    );
   }
 
+  // Check charging state changes
   if (previousCharging !== batt.charging) {
     if (batt.charging) {
       showNotification("Charger Connected", "Battery is now charging");
@@ -226,6 +222,7 @@ function updateBattery(batt) {
     previousCharging = batt.charging;
   }
 
+  // Show full battery notification
   if (level >= 90 && batt.charging) {
     showNotification(
       "Battery Full!",
@@ -234,12 +231,19 @@ function updateBattery(batt) {
   }
 }
 
-// Run on page load
+// Initialize when page loads
 document.addEventListener("DOMContentLoaded", async () => {
+  if (!authToken || !userEmail) {
+    window.location.href = "/login.html";
+    return;
+  }
+
   if (Notification.permission !== "granted") {
     await Notification.requestPermission();
   }
-  sendBatteryStatus();
-  fetchBatteryStatus(); // Fetch initial battery status
+
+  // Start all services
+  await sendBatteryStatus();
+  await fetchBatteryStatus();
   connectWebSocket();
 });

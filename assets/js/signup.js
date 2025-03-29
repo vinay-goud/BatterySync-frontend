@@ -1,4 +1,7 @@
-const API_URL = "https://your-backend-url.com"; // Replace with your backend URL
+const API_URL =
+  window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "https://batterysync-backend.onrender.com"; // ✅ Replace with your backend URL
 
 async function handleSignup(e) {
   e.preventDefault();
@@ -9,17 +12,22 @@ async function handleSignup(e) {
   try {
     const response = await fetch(`${API_URL}/signup`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      }, // ✅ Set headers for JSON data
+      body: JSON.stringify({ email, password }), // ✅ Send JSON data to backend
     });
 
     const data = await response.json();
 
     if (response.ok) {
-      // Redirect to login page after successful signup
-      window.location.href = "login.html";
+      // ✅ Handle successful signup
+      // Store email for login
+      localStorage.setItem("lastEmail", email);
+      window.location.href = "login.html"; // ✅ Redirect to login page after signup
     } else {
-      errorMessage.textContent = data.message || "Signup failed. Try again.";
+      errorMessage.textContent = data.detail || "Signup failed. Try again.";
     }
   } catch (error) {
     console.error("Signup error:", error);
@@ -27,8 +35,9 @@ async function handleSignup(e) {
   }
 }
 
-// Initialize signup form
+// ✅ Initialize signup form event listener
 document.addEventListener("DOMContentLoaded", () => {
-  const signupForm = document.getElementById("signupForm");
-  signupForm.addEventListener("submit", handleSignup);
+  document
+    .getElementById("signupForm")
+    .addEventListener("submit", handleSignup);
 });
