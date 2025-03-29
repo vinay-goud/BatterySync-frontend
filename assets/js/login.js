@@ -1,7 +1,7 @@
 const API_URL =
   window.location.hostname === "localhost"
     ? "http://localhost:5000"
-    : "https://batterysync-backend.onrender.com/";
+    : "https://batterysync-backend.onrender.com";
 
 async function handleLogin(e) {
   e.preventDefault();

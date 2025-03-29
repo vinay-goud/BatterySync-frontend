@@ -8,7 +8,7 @@ const userEmail = localStorage.getItem("userEmail");
 const API_URL =
   window.location.hostname === "localhost"
     ? "http://localhost:5000"
-    : "https://your-render-backend-url.onrender.com";
+    : "https://batterysync-backend.onrender.com";
 
 if (!authToken) {
   window.location.href = "/login.html";
@@ -66,6 +66,11 @@ async function sendBatteryStatus() {
   const battery = await navigator.getBattery();
 
   async function updateBatteryStatus() {
+    if (!userEmail) {
+      console.error("User email is missing. Cannot send battery status.");
+      return;
+    }
+
     const batteryData = {
       email: userEmail,
       percentage: Math.round(battery.level * 100),
@@ -74,14 +79,22 @@ async function sendBatteryStatus() {
 
     console.log("Sending battery data:", batteryData);
 
-    await fetch(`${API_URL}/update_battery`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${authToken}`,
-      },
-      body: JSON.stringify(batteryData),
-    });
+    try {
+      const response = await fetch(`${API_URL}/update_battery`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(batteryData),
+      });
+
+      if (!response.ok) {
+        console.error("Error sending battery data:", await response.text());
+      }
+    } catch (error) {
+      console.error("Failed to send battery data:", error);
+    }
   }
 
   updateBatteryStatus();
@@ -91,12 +104,46 @@ async function sendBatteryStatus() {
   battery.addEventListener("levelchange", updateBatteryStatus);
 }
 
+// Function to fetch battery status from backend
+async function fetchBatteryStatus() {
+  if (!userEmail) {
+    console.error("User email not found in localStorage.");
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `${API_URL}/batterystatus?email=${userEmail}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (data.error) {
+      console.error("Battery status error:", data.error);
+    } else {
+      updateBattery(data);
+    }
+  } catch (error) {
+    console.error("Error fetching battery status:", error);
+  }
+}
+
 // WebSocket connection function
 function connectWebSocket() {
   const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsURL = `${wsProtocol}//${window.location.hostname}:5000/ws?token=${authToken}`;
+  const wsHost =
+    window.location.hostname === "localhost"
+      ? `ws://localhost:5000/ws`
+      : `wss://batterysync-backend.onrender.com/ws`;
 
-  const ws = new WebSocket(wsURL);
+  const ws = new WebSocket(`${wsHost}?token=${authToken}`);
 
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
@@ -193,5 +240,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     await Notification.requestPermission();
   }
   sendBatteryStatus();
+  fetchBatteryStatus(); // Fetch initial battery status
   connectWebSocket();
 });
