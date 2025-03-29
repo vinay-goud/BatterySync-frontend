@@ -295,14 +295,14 @@ function connectWebSocket() {
           return;
         }
 
-        // Extract data for current user
-        const userData = data[userEmail];
-        if (
-          userData?.percentage !== undefined &&
-          userData?.charging !== undefined
+        // Handle both direct and nested data formats
+        if (data[userEmail]) {
+          updateBattery(data);
+        } else if (
+          data.percentage !== undefined &&
+          data.charging !== undefined
         ) {
-          console.log("Valid battery data received:", userData);
-          updateBattery({ [userEmail]: userData });
+          updateBattery({ [userEmail]: data });
         } else {
           console.error("Invalid battery data received:", data);
         }
@@ -344,14 +344,15 @@ function connectWebSocket() {
 // Function to update battery UI
 function updateBattery(data) {
   try {
-    const batteryData = data[userEmail];
-    if (!batteryData?.percentage || !batteryData?.charging) {
+    // Handle both direct data and nested user data formats
+    const batteryData = data[userEmail] || data;
+    const level = batteryData?.percentage;
+    const charging = batteryData?.charging;
+
+    if (typeof level !== "number" || typeof charging !== "boolean") {
       console.error("Invalid battery data structure:", data);
       return;
     }
-
-    const level = batteryData.percentage;
-    const charging = batteryData.charging;
 
     console.log(`Updating battery UI: Level=${level}%, Charging=${charging}`);
 
@@ -359,10 +360,11 @@ function updateBattery(data) {
     const normalizedLevel = Math.max(0, Math.min(100, level));
 
     batteryLiquid.style.transition = "height 0.3s ease-in-out";
-    batteryPercentage.innerHTML = level + "%";
-    batteryLiquid.style.height = `${parseInt(level)}%`;
+    batteryPercentage.innerHTML = normalizedLevel + "%";
+    batteryLiquid.style.height = `${normalizedLevel}%`;
 
-    if (level == 100) {
+    // Update battery status text and icon
+    if (level >= 100) {
       batteryStatus.innerHTML = `Full battery <i class="ri-battery-2-fill green-color"></i>`;
       batteryLiquid.style.height = "103%";
     } else if (level <= 20 && !charging) {
