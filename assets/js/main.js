@@ -197,9 +197,7 @@ async function fetchBatteryStatus() {
 
   try {
     const response = await fetch(
-      `${API_URL}/batterystatus?email=${encodeURIComponent(
-        userEmail
-      )}&token=${encodeURIComponent(authToken)}`,
+      `${API_URL}/batterystatus?email=${encodeURIComponent(userEmail)}`,
       {
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -219,12 +217,14 @@ async function fetchBatteryStatus() {
 
     const data = await response.json();
     console.log("Battery status response:", data);
+
     if (data.error) {
       console.error("Battery status error:", data.error);
       return;
     }
 
-    updateBattery(data);
+    // Wrap the response in the same format as WebSocket data
+    updateBattery({ [userEmail]: data });
   } catch (error) {
     console.error("Error fetching battery status:", error);
     showToast("Error", "Failed to fetch battery status");
@@ -295,17 +295,8 @@ function connectWebSocket() {
           return;
         }
 
-        // Handle both direct and nested data formats
-        if (data[userEmail]) {
-          updateBattery(data);
-        } else if (
-          data.percentage !== undefined &&
-          data.charging !== undefined
-        ) {
-          updateBattery({ [userEmail]: data });
-        } else {
-          console.error("Invalid battery data received:", data);
-        }
+        // Direct update with the received data structure
+        updateBattery(data);
       } catch (error) {
         console.error("WebSocket message error:", error);
       }
@@ -344,13 +335,28 @@ function connectWebSocket() {
 // Function to update battery UI
 function updateBattery(data) {
   try {
-    // Handle both direct data and nested user data formats
-    const batteryData = data[userEmail] || data;
-    const level = batteryData?.percentage;
-    const charging = batteryData?.charging;
+    // Log incoming data for debugging
+    console.log("Raw battery data:", data);
 
-    if (typeof level !== "number" || typeof charging !== "boolean") {
-      console.error("Invalid battery data structure:", data);
+    // Extract battery data properly
+    let batteryData;
+    if (data[userEmail]) {
+      // Handle WebSocket format: {user@email.com: {percentage: 84, charging: false}}
+      batteryData = data[userEmail];
+    } else if (data.percentage !== undefined && data.charging !== undefined) {
+      // Handle direct API response format: {percentage: 84, charging: false}
+      batteryData = data;
+    } else {
+      console.error("Unrecognized data format:", data);
+      return;
+    }
+
+    const level = Number(batteryData.percentage);
+    const charging = Boolean(batteryData.charging);
+
+    // Validate the extracted values
+    if (isNaN(level) || typeof charging !== "boolean") {
+      console.error("Invalid battery values:", { level, charging });
       return;
     }
 
@@ -359,6 +365,7 @@ function updateBattery(data) {
     // Ensure level is within valid range
     const normalizedLevel = Math.max(0, Math.min(100, level));
 
+    // Update UI elements
     batteryLiquid.style.transition = "height 0.3s ease-in-out";
     batteryPercentage.innerHTML = normalizedLevel + "%";
     batteryLiquid.style.height = `${normalizedLevel}%`;
