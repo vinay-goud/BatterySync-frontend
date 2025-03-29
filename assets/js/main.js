@@ -4,9 +4,10 @@ const batteryLiquid = document.querySelector(".battery__liquid"),
   batteryPercentage = document.querySelector(".battery__percentage");
 
 // Add device identification using modern APIs
-const deviceId =
-  localStorage.getItem("deviceId") ||
-  (async () => {
+let deviceId;
+(async () => {
+  deviceId = localStorage.getItem("deviceId");
+  if (!deviceId) {
     try {
       // Try to get device info using User-Agent Client Hints
       const hints = await navigator.userAgentData?.getHighEntropyValues([
@@ -16,25 +17,24 @@ const deviceId =
       ]);
 
       if (hints) {
-        return `${hints.platform}-${hints.model || "unknown"}-${crypto
+        deviceId = `${hints.platform}-${hints.model || "unknown"}-${crypto
           .randomUUID()
           .slice(0, 8)}`;
+      } else {
+        // Fallback to basic user agent parsing
+        const userAgent = navigator.userAgent;
+        const platform =
+          /Windows|Mac|Linux|Android|iOS/.exec(userAgent)?.[0] || "unknown";
+        deviceId = `${platform}-${crypto.randomUUID().slice(0, 8)}`;
       }
+      localStorage.setItem("deviceId", deviceId);
     } catch (error) {
-      console.warn(
-        "UserAgentData not available, falling back to basic identification"
-      );
+      console.warn("Device identification failed, using fallback", error);
+      deviceId = `device-${crypto.randomUUID().slice(0, 8)}`;
+      localStorage.setItem("deviceId", deviceId);
     }
-
-    // Fallback to basic user agent parsing
-    const userAgent = navigator.userAgent;
-    const platform =
-      /Windows|Mac|Linux|Android|iOS/.exec(userAgent)?.[0] || "unknown";
-    return `${platform}-${crypto.randomUUID().slice(0, 8)}`;
-  })();
-
-localStorage.setItem("deviceId", await deviceId);
-// Get device info from local storage
+  }
+})();
 
 const authToken = localStorage.getItem("authToken");
 const userEmail = localStorage.getItem("userEmail");
@@ -278,12 +278,13 @@ function connectWebSocket() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (!verifyUserAccess(data)) return;
         console.log("WebSocket message received:", data);
+
         if (data.error === "unauthorized") {
           handleAuthError();
           return;
         }
+
         // Extract data for current user
         const userData = data[userEmail];
         if (
@@ -291,7 +292,8 @@ function connectWebSocket() {
           userData.percentage !== undefined &&
           userData.charging !== undefined
         ) {
-          updateBattery(data);
+          console.log("Valid battery data received:", userData);
+          updateBattery({ [userEmail]: userData });
         } else {
           console.error("Invalid battery data received:", data);
         }
@@ -322,27 +324,36 @@ function connectWebSocket() {
 }
 
 // Function to update battery UI
-function updateBattery(batt) {
+function updateBattery(data) {
   try {
-    const level = batt.percentage;
+    // Extract the correct battery data
+    const batteryData = data[userEmail] || data;
+    const level = batteryData.percentage;
+    const charging = batteryData.charging;
+
+    if (level === undefined || charging === undefined) {
+      console.error("Invalid battery data structure:", data);
+      return;
+    }
+
+    console.log(`Updating battery UI: Level=${level}%, Charging=${charging}`);
 
     batteryLiquid.style.transition = "height 0.3s ease-in-out";
     batteryPercentage.innerHTML = level + "%";
     batteryLiquid.style.height = `${parseInt(level)}%`;
 
-    // Update battery status text and icon
     if (level == 100) {
       batteryStatus.innerHTML = `Full battery <i class="ri-battery-2-fill green-color"></i>`;
       batteryLiquid.style.height = "103%";
-    } else if (level <= 20 && !batt.charging) {
+    } else if (level <= 20 && !charging) {
       batteryStatus.innerHTML = `Low battery <i class="ri-plug-line animated-red"></i>`;
-    } else if (batt.charging) {
+    } else if (charging) {
       batteryStatus.innerHTML = `Charging... <i class="ri-flashlight-line animated-green"></i>`;
     } else {
       batteryStatus.innerHTML = "";
     }
 
-    // Update battery color
+    // Update battery color based on level
     batteryLiquid.classList.remove(
       "gradient-color-red",
       "gradient-color-orange",
@@ -361,8 +372,8 @@ function updateBattery(batt) {
     }
 
     // Handle charging state changes
-    if (previousCharging !== batt.charging) {
-      if (batt.charging) {
+    if (previousCharging !== charging) {
+      if (charging) {
         showNotification("Charger Connected", "Battery is now charging");
       } else if (previousCharging !== null) {
         showNotification(
@@ -370,11 +381,11 @@ function updateBattery(batt) {
           "Battery is on power save mode"
         );
       }
-      previousCharging = batt.charging;
+      previousCharging = charging;
     }
 
     // Show full battery notification
-    if (level >= 90 && batt.charging) {
+    if (level >= 90 && charging) {
       showNotification(
         "Battery Full!",
         "Unplug the charger to save battery health."
