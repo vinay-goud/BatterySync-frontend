@@ -6,6 +6,10 @@
     "display": "standalone",
     "background_color": "#000000",
     "theme_color": "#000000",
+    "scope": "/",
+    "permissions": [
+        "https://batterysync-backend.onrender.com/*"
+    ],
     "icons": [
         {
             "src": "assets/img/icon-192.png",

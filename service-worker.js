@@ -2,10 +2,13 @@ const CACHE_NAME = "batterysync-v1";
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
+  "/login.html",
+  "/signup.html",
   "/manifest.json",
   "/assets/css/styles.css",
   "/assets/css/notifications.css",
   "/assets/js/main.js",
+  "/assets/js/signup.js",
   "/assets/js/login.js",
   "/assets/img/favicon.png",
   "/assets/img/icon-192.png",

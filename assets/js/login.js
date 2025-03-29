@@ -17,11 +17,13 @@ async function handleLogin(e) {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
+      credentials: "include",
+      mode: "cors",
       body: JSON.stringify({ email, password }),
     });
-
+    console.log("Login response status:", response.status);
     const data = await response.json();
-    console.log("Login response:", data);
+    console.log("Login response data:", data);
 
     if (response.ok && data.access_token) {
       // Store the token and email in localStorage

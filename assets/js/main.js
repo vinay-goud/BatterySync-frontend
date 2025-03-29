@@ -3,6 +3,39 @@ const batteryLiquid = document.querySelector(".battery__liquid"),
   batteryStatus = document.querySelector(".battery__status"),
   batteryPercentage = document.querySelector(".battery__percentage");
 
+// Add device identification using modern APIs
+const deviceId =
+  localStorage.getItem("deviceId") ||
+  (async () => {
+    try {
+      // Try to get device info using User-Agent Client Hints
+      const hints = await navigator.userAgentData?.getHighEntropyValues([
+        "platform",
+        "platformVersion",
+        "model",
+      ]);
+
+      if (hints) {
+        return `${hints.platform}-${hints.model || "unknown"}-${crypto
+          .randomUUID()
+          .slice(0, 8)}`;
+      }
+    } catch (error) {
+      console.warn(
+        "UserAgentData not available, falling back to basic identification"
+      );
+    }
+
+    // Fallback to basic user agent parsing
+    const userAgent = navigator.userAgent;
+    const platform =
+      /Windows|Mac|Linux|Android|iOS/.exec(userAgent)?.[0] || "unknown";
+    return `${platform}-${crypto.randomUUID().slice(0, 8)}`;
+  })();
+
+localStorage.setItem("deviceId", await deviceId);
+// Get device info from local storage
+
 const authToken = localStorage.getItem("authToken");
 const userEmail = localStorage.getItem("userEmail");
 const API_URL =
@@ -104,6 +137,8 @@ async function sendBatteryStatus() {
 
       const batteryData = {
         email: userEmail,
+        deviceId: deviceId,
+        deviceName: navigator.platform,
         percentage: Math.round(battery.level * 100),
         charging: battery.charging,
       };
@@ -162,7 +197,9 @@ async function fetchBatteryStatus() {
 
   try {
     const response = await fetch(
-      `${API_URL}/batterystatus?email=${encodeURIComponent(userEmail)}`,
+      `${API_URL}/batterystatus?email=${encodeURIComponent(
+        userEmail
+      )}&token=${encodeURIComponent(authToken)}`,
       {
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -181,6 +218,7 @@ async function fetchBatteryStatus() {
     }
 
     const data = await response.json();
+    console.log("Battery status response:", data);
     if (data.error) {
       console.error("Battery status error:", data.error);
       return;
@@ -191,6 +229,23 @@ async function fetchBatteryStatus() {
     console.error("Error fetching battery status:", error);
     showToast("Error", "Failed to fetch battery status");
   }
+}
+
+// Add user verification
+function verifyUserAccess(data) {
+  // Ensure user only sees their own data
+  if (!data || !data[userEmail]) {
+    console.error("Data mismatch: No data for current user");
+    return false;
+  }
+
+  const userData = data[userEmail];
+  if (!userData.deviceId) {
+    console.error("Data mismatch: No device identification");
+    return false;
+  }
+
+  return true;
 }
 
 // WebSocket connection function
@@ -208,6 +263,7 @@ function connectWebSocket() {
       : `wss://batterysync-backend.onrender.com/ws`;
 
   try {
+    console.log("Connecting WebSocket...");
     const ws = new WebSocket(
       `${wsURL}?token=${encodeURIComponent(
         authToken
@@ -222,11 +278,23 @@ function connectWebSocket() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        if (!verifyUserAccess(data)) return;
+        console.log("WebSocket message received:", data);
         if (data.error === "unauthorized") {
           handleAuthError();
           return;
         }
-        updateBattery(data);
+        // Extract data for current user
+        const userData = data[userEmail];
+        if (
+          userData &&
+          userData.percentage !== undefined &&
+          userData.charging !== undefined
+        ) {
+          updateBattery(data);
+        } else {
+          console.error("Invalid battery data received:", data);
+        }
       } catch (error) {
         console.error("WebSocket message error:", error);
       }
@@ -235,6 +303,7 @@ function connectWebSocket() {
     ws.onerror = (error) => {
       console.error("WebSocket error:", error);
       wsReconnectAttempts++;
+      showToast("Error", "Connection error. Retrying...");
     };
 
     ws.onclose = () => {
@@ -248,6 +317,7 @@ function connectWebSocket() {
     console.error("WebSocket connection error:", error);
     wsReconnectAttempts++;
     setTimeout(() => connectWebSocket(), 5000);
+    showToast("Error", "Failed to connect. Retrying...");
   }
 }
 

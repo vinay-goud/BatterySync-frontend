@@ -16,18 +16,25 @@ async function handleSignup(e) {
         "Content-Type": "application/json",
         Accept: "application/json",
       }, // ✅ Set headers for JSON data
+      credentials: "include",
+      mode: "cors",
       body: JSON.stringify({ email, password }), // ✅ Send JSON data to backend
     });
-
+    console.log("Signup response status:", response.status);
     const data = await response.json();
-
+    console.log("Signup response:", data);
+    if (response.status === 409) {
+      errorMessage.textContent = "Email already exists. Try another.";
+      return;
+    }
     if (response.ok) {
       // ✅ Handle successful signup
       // Store email for login
       localStorage.setItem("lastEmail", email);
       window.location.href = "login.html"; // ✅ Redirect to login page after signup
     } else {
-      errorMessage.textContent = data.detail || "Signup failed. Try again.";
+      errorMessage.textContent =
+        data.detail || "Signup failed. Please Try again.";
     }
   } catch (error) {
     console.error("Signup error:", error);
